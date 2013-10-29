@@ -1,0 +1,6 @@
+*.suo
+*.user
+*.userprefs
+bin
+obj
+References
