@@ -2,7 +2,9 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 
-using Fleck;
+using SuperWebSocket;
+using SuperSocket.SocketBase;
+using SuperSocket.SocketBase.Config;
 
 namespace TisTyme
 {
@@ -15,14 +17,20 @@ namespace TisTyme
 		{
 			Configuration = configuration;
 			bool useEncryption = configuration.Certificate != null;
-			string serverString;
-			if (useEncryption)
-				serverString = string.Format("wss://{0}:{1}", configuration.Host, configuration.Port);
-			else
-				serverString = string.Format("ws://{0}:{1}", configuration.Host, configuration.Port);
-			SocketServer = new WebSocketServer(serverString);
-			if (useEncryption)
-				SocketServer.Certificate = new X509Certificate2(configuration.Certificate);
+			SocketServer.NewSessionConnected += new SessionHandler<WebSocketSession>(OnConnect);
+			SocketServer.SessionClosed += new SessionHandler<WebSocketSession, CloseReason>(OnDisconnect);
+			SocketServer.NewMessageReceived += new SessionHandler<WebSocketSession, string>(OnMessage);
+			ServerConfig serverConfiguration = new ServerConfig();
+			serverConfiguration.Ip = configuration.Host;
+			serverConfiguration.Port = configuration.Port;
+			serverConfiguration.Mode = SocketMode.Tcp;
+			if (configuration.Certificate != null)
+			{
+				CertificateConfig certificateConfiguration = new CertificateConfig();
+				certificateConfiguration.FilePath = configuration.Certificate;
+				serverConfiguration.Certificate = certificateConfiguration;
+			}
+			SocketServer.Setup(serverConfiguration);
 		}
 
 		public void Dispose()
@@ -32,14 +40,32 @@ namespace TisTyme
 
 		public void Run()
 		{
-			SocketServer.Start(OnConnection);
+			SocketServer.Start();
 		}
 
-		private void OnConnection(IWebSocketConnection connection)
+		private string GetTimestamp()
 		{
-			Console.WriteLine("New connection");
-			ManualResetEvent resetEvent = new ManualResetEvent(false);
-			resetEvent.WaitOne();
+			return DateTime.Now.ToString("HH:mm:ss");
+		}
+
+		private void Write(string message, WebSocketSession session, params object[] arguments)
+		{
+			Console.WriteLine("{0} [{1}] {2}", GetTimestamp(), session.Host, string.Format(message, arguments));
+		}
+
+		private void OnConnect(WebSocketSession session)
+		{
+			Write("Connected", session);
+		}
+
+		private void OnDisconnect(WebSocketSession session, CloseReason reason)
+		{
+			Write("Disconnected", session);
+		}
+
+		private void OnMessage(WebSocketSession session, string message)
+		{
+			Write("Message: {0}", session, message);
 		}
 	}
 }
